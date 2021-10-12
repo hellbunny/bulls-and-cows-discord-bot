@@ -1,14 +1,16 @@
 console.log("NodeJS Version: " + process.version)
 const Discord = require("discord.js")
-const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS, Discord.Intents.FLAGS.GUILD_MESSAGES, Discord.Intents.FLAGS.GUILD_MESSAGE_REACTIONS ] });
-
+const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS, Discord.Intents.FLAGS.GUILD_MESSAGES, Discord.Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Discord.Intents.FLAGS.GUILD_MEMBERS ] });
 const secrets = new Map();
+const DEFAULT_NUMBERS = 4;
+const DEFAULT_ATTEMPTS = 50;
 
 
+var logWithDate = function(input) {
+  console.log(new Date().toISOString()+": "+input )
+}
 
-
-var generateSecret = function(nrs) 
-{
+var generateSecret = function(nrs) {
   let result = Math.floor(Math.random()*Math.pow(10, nrs));
   while(!containsNoDuplicates(""+result) || (""+result).length != nrs)
     result = Math.floor(Math.random()*Math.pow(10, nrs));
@@ -17,84 +19,105 @@ var generateSecret = function(nrs)
 }
 
 client.on("ready", () => {
-  console.log(`Logged in as ${client.user.tag}!`)
-  console.log(`Logged in as ${client.user.id}!`)
+  logWithDate(`Logged in as ${client.user.tag}!`)
+  logWithDate(`Logged in as ${client.user.id}!`)
 })
 
-var containsNoDuplicates = function(str) 
-{
+var containsNoDuplicates = function(str) {
   let validationSet = new Set()
   str.split("").forEach(item => validationSet.add(item))
   return validationSet.size === str.length;
 }
 
+var buildKey = function(msg, userTag) {
+  return msg.channelId+"_"+(userTag ? userTag : msg.author.tag);
+}
+
+
+var resetSecret = function(msg, user, numbers, attempts, vsUser) {
+  if(!user) user = msg.author;
+  let resetKey = buildKey(msg, user.tag)
+  let existed = secrets.get(resetKey);
+  if(existed) {
+    if(!numbers) numbers = secrets.get(resetKey).numbers
+    if(!attempts) attempts = secrets.get(resetKey).attempts
+  }
+  if(!numbers) numbers = DEFAULT_NUMBERS
+  if(!attempts) attempts = DEFAULT_ATTEMPTS
+  let secret =  generateSecret(numbers)
+  logWithDate(`Secret ${secret} for ${resetKey}`)  
+  secrets.set(resetKey, { "numbers" : numbers, "attempts" : attempts, "secret" : secret, "attemptsLeft" : attempts})  
+  
+  if(existed) msg.reply(`${user}, access code to breach the ` + (vsUser ? `${vsUser}` : `${client.user}`) + ` reset to ${attempts} attempts and ${numbers} different digits`)
+  else msg.reply(`${user}, to breach the ` + (vsUser ? `${vsUser}` : `${client.user}`) + `, enter the access code (${numbers} different digits). Countermeasures will be enabled after ${attempts} failed attempts.`)
+}
+
 client.on("messageCreate", msg => {
   if(msg.author.id === client.user.id) return
-  let key = msg.channelId+"_"+msg.author.tag;
+  let key = buildKey(msg);
+
+  if( msg.member.roles.cache.some(r => r.name === "botmaster") && msg.content.startsWith("reset")) {
+    let commandParts = msg.content.split(",");
+    let numbers = parseInt(commandParts[1]);
+    let attempts = parseInt(commandParts[2]);
+    let userTag = commandParts[3];
+    let vsUserTag = commandParts[4];
+
+    logWithDate(`guild members ${msg.guild.memberCount}`);
+
+    if(!userTag) {
+      for (let [snowflake, guildMember] of msg.channel.members) {   
+        if(client.user.id === guildMember.user.id) continue
+        resetSecret(msg, guildMember.user, numbers, attempts)
+      }
+    } else {
+      let userByTag = client.users.cache.find(u => u.tag === userTag);
+
+      let vsUserByTag = null;
+      for (let [snowflake, guildMember] of msg.channel.members) {
+        if(vsUserTag === guildMember.user.tag) vsUserByTag = guildMember.user
+      }  
+      resetSecret(msg, userByTag, numbers, attempts, vsUserByTag)
+    }
+    return
+  }
   
-  if(secrets.get(key) && secrets.get(key).solved && !msg.content.startsWith("reset")) 
-  {
+  logWithDate("key="+key)
+
+  if(!secrets.get(key)) {
+    resetSecret(msg)
+    return
+  } 
+
+  if(secrets.get(key).solved && !msg.content.startsWith("reset")) {
     msg.reply(`Access granted!`);
     return
   }
-  console.log("key="+key);
-  if(
-    !secrets.get(key) 
-    ||
-    (msg.member.roles.cache.some(r => r.name === "botmaster") && msg.content.startsWith("reset"))
-  ) 
-  {
     
-    let commandParts = msg.content.split(",");
-    let numbers = commandParts[1];
-    let attempts = commandParts[2];
-
-    if(secrets.get(key)) {
-      if(!numbers) numbers = secrets.get(key).numbers;
-      if(!attempts) attempts = secrets.get(key).attempts;
-    }
-
-    if(!numbers) numbers = 4;
-    if(!attempts) attempts = 50;
-
-    let secret =  generateSecret(numbers);
-    console.log(`Secret ${secret} for ${key}`)
-    secrets.set(key, { "numbers" : numbers, "attempts" : attempts, "secret" : secret, "attemptsLeft" : attempts});
-
-    if(msg.content.startsWith("reset")) {
-      msg.reply(`Password reset to ${attempts} attempts and ${numbers} different digits`);
-      return
-    } else {
-      msg.reply(`Enter password (${numbers} different digits)`);
-    }
+  if(secrets.get(key).attemptsLeft < 1) 
+  {
+    msg.reply(`Countermeasures enabled!`)
+    return
   }
 
-  let nr = secrets.get(key).secret;
-
   if(! new RegExp("^\\d{"+  secrets.get(key).numbers +"}$").test(msg.content)) {
-    msg.reply(`Invalid input, please enter ${secrets.get(key).numbers} digits`)
+    msg.reply(`Invalid input, access code consists of ${secrets.get(key).numbers} different digits`)
     return
   }
 
   if(!containsNoDuplicates(msg.content)) {
-    msg.reply(`Invalid input, contains duplicates`)
+    msg.reply(`Invalid input, contains duplicate digits`)
     return
   }
-  
-  if(secrets.get(key).attemptsLeft < 1) 
-  {
-    msg.reply(`No attempts left. Reset required!`)
-    return
-  }
+
     
 
   let inputChars = msg.content.split("");
   let secretString = new String(secrets.get(key).secret);
   let actualChars = secretString.split("");
-  //bull is correct number in the correct position
-  //cow is correct number in the incorrect position
-  let bullsNr = 0;
-  let cowsNr = 0;
+
+  let bullsNr = 0; //bull is correct number in the correct position
+  let cowsNr = 0; //cow is correct number in the incorrect position
 
   for (let i = 0; i < inputChars.length; i++) {
     //arrays are same size, ensured by validation
@@ -107,18 +130,19 @@ client.on("messageCreate", msg => {
     }
   }
 
-
   secrets.get(key).attemptsLeft--;
 
+  logWithDate(`${key} - bulls=${bullsNr} vs needed=${secrets.get(key).numbers}, secret=${secretString}`)
   if(bullsNr === secrets.get(key).numbers) {
    msg.reply("Access granted!");
    secrets.get(key).solved = true;
    return
   }
 
-  msg.reply(`[${msg.content}] contains ${bullsNr} bulls, ${cowsNr} cows, you have ${secrets.get(key).attemptsLeft}/${secrets.get(key).attempts} attempts left.`)
+  msg.reply(`[${msg.content}] ${bullsNr} digit(s) are placed correctly, ${cowsNr} digit(s) are placed incorrectly. ` 
+    + (secrets.get(key).attemptsLeft < 1 ? 
+        'Countermeasures enabled! ' 
+        : `Countermeasures will be enabled after ${secrets.get(key).attemptsLeft} failed attempt(s)`))
 })
-
-//client.login(process.env["DISCORD_BOT_TOKEN"]);
 
 client.login("ODk2NDg3NjgyNjE4ODQzMTc3.YWH1Nw.OchkF-1sC-4MWn6ynMUwXGHRg2I");
