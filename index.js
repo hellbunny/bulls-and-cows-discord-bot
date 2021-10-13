@@ -1,9 +1,11 @@
 console.log("NodeJS Version: " + process.version)
 const Discord = require("discord.js")
+//const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS, Discord.Intents.FLAGS.GUILD_MESSAGES, Discord.Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Discord.Intents.FLAGS.GUILD_MEMBERS, Discord.Intents.FLAGS. ] , fetchAllMembers : true});
 const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS, Discord.Intents.FLAGS.GUILD_MESSAGES, Discord.Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Discord.Intents.FLAGS.GUILD_MEMBERS ] , fetchAllMembers : true});
 const secrets = new Map();
 const DEFAULT_NUMBERS = 4;
 const DEFAULT_ATTEMPTS = 50;
+const STOPWORD = 'FLÜGGÅӘNKБ€ČHIŒSSØLĮÊN';
 
 
 var logWithDate = function(input) {
@@ -54,12 +56,14 @@ var resetSecret = function(msg, user, numbers, attempts, vsUser) {
 
 client.on("messageCreate", msg => {
   if(msg.author.id === client.user.id) return
+
   let key = buildKey(msg);
 
-  /*
-  if(msg.guild.memberCount != msg.guild.members.size()) {
-    msg.guild.members.fetch();
-  }*/
+  if(msg.content === STOPWORD) 
+  {
+    let secretToStop = secrets.get(key);
+    if(secretToStop) secretToStop.stopped = true;    
+  }
 
   if( msg.member.roles.cache.some(r => r.name === "botmaster") && msg.content.startsWith("reset")) {
     let commandParts = msg.content.split(",");
@@ -67,8 +71,6 @@ client.on("messageCreate", msg => {
     let attempts = parseInt(commandParts[2]);
     let userTag = commandParts[3];
     let vsUserTag = commandParts[4];
-
-    logWithDate(`guild members ${msg.guild.memberCount}`);
 
     if(!userTag) {
       for (let [snowflake, guildMember] of msg.channel.members) {   
@@ -96,6 +98,11 @@ client.on("messageCreate", msg => {
 
   if(secrets.get(key).solved && !msg.content.startsWith("reset")) {
     msg.reply(`Access granted!`);
+    return
+  }
+
+  if(secrets.get(key).stopped && !msg.content.startsWith("reset")) {
+    msg.reply(`Connection reset`);
     return
   }
     
