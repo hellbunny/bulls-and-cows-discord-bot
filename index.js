@@ -1,6 +1,6 @@
 console.log("NodeJS Version: " + process.version)
 const Discord = require("discord.js")
-const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS, Discord.Intents.FLAGS.GUILD_MESSAGES, Discord.Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Discord.Intents.FLAGS.GUILD_MEMBERS ] });
+const client = new Discord.Client({ intents: [Discord.Intents.FLAGS.GUILDS, Discord.Intents.FLAGS.GUILD_MESSAGES, Discord.Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Discord.Intents.FLAGS.GUILD_MEMBERS ] , fetchAllMembers : true});
 const secrets = new Map();
 const DEFAULT_NUMBERS = 4;
 const DEFAULT_ATTEMPTS = 50;
@@ -55,6 +55,11 @@ var resetSecret = function(msg, user, numbers, attempts, vsUser) {
 client.on("messageCreate", msg => {
   if(msg.author.id === client.user.id) return
   let key = buildKey(msg);
+
+  /*
+  if(msg.guild.memberCount != msg.guild.members.size()) {
+    msg.guild.members.fetch();
+  }*/
 
   if( msg.member.roles.cache.some(r => r.name === "botmaster") && msg.content.startsWith("reset")) {
     let commandParts = msg.content.split(",");
