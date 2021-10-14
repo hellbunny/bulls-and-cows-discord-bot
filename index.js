@@ -6,10 +6,11 @@ const secrets = new Map();
 const DEFAULT_NUMBERS = 4;
 const DEFAULT_ATTEMPTS = 50;
 const STOPWORD = 'FLÜGGÅӘNKБ€ČHIŒSSØLĮÊN';
+const FLUGGEGEHEINEN = new RegExp("^F.*GG.*N$")
 
 
-var logWithDate = function(input) {
-  console.log(new Date().toISOString()+": "+input )
+var logWithDate = function(input,msg) {
+  console.log(`${new Date().toISOString()} ${msg ?msg.channel.name : ''} : ${input}` )
 }
 
 var generateSecret = function(nrs) {
@@ -47,7 +48,7 @@ var resetSecret = function(msg, user, numbers, attempts, vsUser) {
   if(!numbers) numbers = DEFAULT_NUMBERS
   if(!attempts) attempts = DEFAULT_ATTEMPTS
   let secret =  generateSecret(numbers)
-  logWithDate(`Secret ${secret} for ${resetKey}`)  
+  logWithDate(`Secret ${secret} for ${resetKey}`, msg)  
   secrets.set(resetKey, { "numbers" : numbers, "attempts" : attempts, "secret" : secret, "attemptsLeft" : attempts})  
   
   if(existed) msg.reply(`${user}, access code to breach the ` + (vsUser ? `${vsUser}` : `${client.user}`) + ` reset to ${attempts} attempts and ${numbers} different digits`)
@@ -59,10 +60,16 @@ client.on("messageCreate", msg => {
 
   let key = buildKey(msg);
 
-  if(msg.content === STOPWORD) 
-  {
-    let secretToStop = secrets.get(key);
-    if(secretToStop) secretToStop.stopped = true;    
+ if(secrets.get(key) && msg.content) {
+  if(FLUGGEGEHEINEN.test(msg.content.toUpperCase()) && !(msg.content.toUpperCase() === STOPWORD) && !secrets.get(key).pwned) {
+      let secretToPWN = secrets.get(key);
+      secretToPWN.pwned = true;  
+      msg.reply(`https://tenor.com/view/bring-on-the-fluggegecheimen-fluggegecheimen-%D1%84%D0%BB%D1%8E%D0%B3%D0%B3%D0%B5%D0%B3%D0%B5%D1%85%D0%B0%D0%B9%D0%BC%D0%B5%D0%BD-gif-16111558`);
+      msg.reply(`https://tenor.com/view/flugenheimer-tickle-scream-gif-16608814`);  
+    }  else if(msg.content.toUpperCase() === STOPWORD) {
+      let secretToStop = secrets.get(key);
+      secretToStop.stopped = true;    
+    } 
   }
 
   if( msg.member.roles.cache.some(r => r.name === "botmaster") && msg.content.startsWith("reset")) {
@@ -89,7 +96,7 @@ client.on("messageCreate", msg => {
     return
   }
   
-  logWithDate("key="+key)
+  logWithDate("key="+key, msg)
 
   if(!secrets.get(key)) {
     resetSecret(msg)
@@ -105,6 +112,12 @@ client.on("messageCreate", msg => {
     msg.reply(`Connection reset`);
     return
   }
+
+  /*
+  if(secrets.get(key).pwned && !msg.content.startsWith("reset")) {
+    msg.reply(`PWNd!`);
+    return
+  }*/
     
   if(secrets.get(key).attemptsLeft < 1) 
   {
@@ -144,7 +157,9 @@ client.on("messageCreate", msg => {
 
   secrets.get(key).attemptsLeft--;
 
-  logWithDate(`${key} - bulls=${bullsNr} vs needed=${secrets.get(key).numbers}, secret=${secretString}`)
+  
+
+  logWithDate(`${key} - bulls=${bullsNr} vs needed=${secrets.get(key).numbers}, secret=${secretString}`, msg)
   if(bullsNr === secrets.get(key).numbers) {
    msg.reply("Access granted!");
    secrets.get(key).solved = true;
